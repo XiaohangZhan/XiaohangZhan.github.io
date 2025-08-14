@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="description"
+        content="Deformable Neural Radiance Fields creates free-viewpoint portraits (nerfies) from casually captured videos.">
+  <meta name="keywords" content="Image generation, Diffusion models, Latent rendering">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LaRender: Training-Free Occlusion Control in Image Generation via Latent Rendering</title>
+
+  <!-- Global site tag (gtag.js) - Google Analytics -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-PYVRSFMDRL"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+
+    function gtag() {
+      dataLayer.push(arguments);
+    }
+
+    gtag('js', new Date());
+
+    gtag('config', 'G-PYVRSFMDRL');
+  </script>
+
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro"
+        rel="stylesheet">
+
+  <link rel="stylesheet" href="./static/css/bulma.min.css">
+  <link rel="stylesheet" href="./static/css/bulma-carousel.min.css">
+  <link rel="stylesheet" href="./static/css/bulma-slider.min.css">
+  <link rel="stylesheet" href="./static/css/fontawesome.all.min.css">
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link rel="stylesheet" href="./static/css/index.css">
+  <style>
+  #resultImage {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 20px auto;
+  }
+  #buttons button {
+    margin: 5px;
+    padding: 8px 16px;
+    font-size: 16px;
+    border: none;
+    border-radius: 6px;
+    background-color: #007bff;
+    color: white;
+    cursor: pointer;
+  }
+  #buttons button:hover {
+    background-color: #0056b3;
+  }
+</style>
+
+<style>
+.rain-sunlight-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+/* 左侧纵向滑条和标签 */
+.vertical-slider-wrapper {
+  display: flex;
+  flex-direction: row; /* 标签在左，滑条在右 */
+  align-items: center;
+  gap: 5px;
+}
+
+.vertical-slider-wrapper span {
+  writing-mode: vertical-rl; /* 文字纵向显示 */
+  transform: rotate(180deg); /* 保持从上到下数值递增 */
+  font-weight: bold;
+}
+
+/* 纵向滑条，上小下大 */
+.vertical-slider-wrapper input {
+  -webkit-appearance: slider-vertical;
+  width: 20px;
+  height: 300px;
+  transform: rotate(180deg); /* 旋转滑条，使上小下大 */
+}
+
+/* 图片+横向滑条的容器 */
+.image-horizontal-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.horizontal-slider-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.horizontal-slider-wrapper span {
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.horizontal-slider-wrapper input {
+  width: 400px;
+}
+
+.rain-sunlight-image img {
+  max-width: 500px;
+  height: auto;
+  border: 1px solid #ccc;
+}
+</style>
+
+
+  <link rel="icon" href="./static/images/favicon.svg">
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script defer src="./static/js/fontawesome.all.min.js"></script>
+  <script src="./static/js/bulma-carousel.min.js"></script>
+  <script src="./static/js/bulma-slider.min.js"></script>
+  <script src="./static/js/index.js"></script>
+</head>
+<body>
+
+<nav class="navbar" role="navigation" aria-label="main navigation">
+  <div class="navbar-brand">
+    <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false">
+      <span aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
+    </a>
+  </div>
+  <div class="navbar-menu">
+    <div class="navbar-start" style="flex-grow: 1; justify-content: center;">
+      <a class="navbar-item" href="https://xiaohangzhan.github.io/">
+      <span class="icon">
+          <i class="fas fa-home"></i>
+      </span>
+      </a>
+
+      <div class="navbar-item has-dropdown is-hoverable">
+        <a class="navbar-link">
+          More Research
+        </a>
+        <div class="navbar-dropdown">
+          <a class="navbar-item" href="https://xiaohangzhan.github.io/projects/deocclusion/">
+            De-Occlusion
+          </a>
+          <a class="navbar-item" href="https://haolinliu97.github.io/Stable-Score/">
+            3D Correspondence
+          </a>
+          <a class="navbar-item" href="https://hanchaoliu.github.io/Prog-MoGen/">
+            ProgMoGen
+          </a>
+          <a class="navbar-item" href="https://alvinliu0.github.io/projects/HumanGaussian">
+            HumanGaussian
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</nav>
+
+
+<section class="hero">
+  <div class="hero-body">
+    <div class="container is-max-desktop">
+      <div class="columns is-centered">
+        <div class="column has-text-centered">
+          <h1 class="title is-1 publication-title">LaRender: Training-Free Occlusion Control in Image Generation via Latent Rendering</h1>
+          
+          <div style="font-weight: bold; font-size: 1.5rem;">
+            ICCV 2025 (<span style="color: orange;">Oral</span>)
+          </div>
+
+          <div class="is-size-5 publication-authors">
+            <span class="author-block">
+              <a href="https://xiaohangzhan.github.io/">Xiaohang Zhan</a>,</span>
+            <span class="author-block">
+              Dingming Liu</span>
+          </div>
+
+          <div class="is-size-5 publication-authors">
+            <span class="author-block">Tencent</span>
+          </div>
+
+          <div class="column has-text-centered">
+            <div class="publication-links">
+              <!-- PDF Link. -->
+              <span class="link-block">
+                <a href="https://arxiv.org/pdf/2508.07647"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="fas fa-file-pdf"></i>
+                  </span>
+                  <span>Paper</span>
+                </a>
+              </span>
+              <span class="link-block">
+                <a href="https://arxiv.org/abs/2508.07647"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="ai ai-arxiv"></i>
+                  </span>
+                  <span>arXiv</span>
+                </a>
+              </span>
+              <!-- Video Link. -->
+              <span class="link-block">
+                <a href=""
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="fab fa-youtube"></i>
+                  </span>
+                  <span>Video</span>
+                </a>
+              </span>
+              <!-- Code Link. -->
+              <span class="link-block">
+                <a href="https://github.com/XiaohangZhan/LaRender"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="fab fa-github"></i>
+                  </span>
+                  <span>Code</span>
+                  </a>
+              </span>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="hero teaser">
+  <div class="container is-max-desktop">
+    <div class="hero-body">
+      <img src="./static/images/teaser.jpg" 
+        alt="Teaser Image" 
+        style="width:100%; height:auto;">
+      </img>
+      <div class="content has-text-justified">
+        <p>
+        Figure 1. LaRender enables precise control of occlusion relationships among objects in a training-free way. It also enables rich effects such as opacity control.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- <section class="hero is-light is-small">
+  <div class="hero-body">
+    <div class="container">
+      <div id="results-carousel" class="carousel results-carousel">
+        <div class="item item-steve">
+          <video poster="" id="steve" autoplay controls muted loop playsinline height="100%">
+            <source src="./static/videos/steve.mp4"
+                    type="video/mp4">
+          </video>
+        </div>
+        <div class="item item-chair-tp">
+          <video poster="" id="chair-tp" autoplay controls muted loop playsinline height="100%">
+            <source src="./static/videos/chair-tp.mp4"
+                    type="video/mp4">
+          </video>
+        </div>
+        <div class="item item-shiba">
+          <video poster="" id="shiba" autoplay controls muted loop playsinline height="100%">
+            <source src="./static/videos/shiba.mp4"
+                    type="video/mp4">
+          </video>
+        </div>
+        <div class="item item-fullbody">
+          <video poster="" id="fullbody" autoplay controls muted loop playsinline height="100%">
+            <source src="./static/videos/fullbody.mp4"
+                    type="video/mp4">
+          </video>
+        </div>
+        <div class="item item-blueshirt">
+          <video poster="" id="blueshirt" autoplay controls muted loop playsinline height="100%">
+            <source src="./static/videos/blueshirt.mp4"
+                    type="video/mp4">
+          </video>
+        </div>
+        <div class="item item-mask">
+          <video poster="" id="mask" autoplay controls muted loop playsinline height="100%">
+            <source src="./static/videos/mask.mp4"
+                    type="video/mp4">
+          </video>
+        </div>
+        <div class="item item-coffee">
+          <video poster="" id="coffee" autoplay controls muted loop playsinline height="100%">
+            <source src="./static/videos/coffee.mp4"
+                    type="video/mp4">
+          </video>
+        </div>
+        <div class="item item-toby">
+          <video poster="" id="toby" autoplay controls muted loop playsinline height="100%">
+            <source src="./static/videos/toby2.mp4"
+                    type="video/mp4">
+          </video>
+        </div>
+      </div>
+    </div>
+  </div>
+</section> -->
+
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <!-- Abstract. -->
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Abstract</h2>
+        <div class="content has-text-justified">
+          <p>
+            We propose a novel training-free image generation algorithm that precisely controls
+             the occlusion relationships between objects in an image. 
+             Existing image generation methods typically rely on prompts to influence occlusion,
+             which often lack precision. 
+             While layout-to-image methods provide control over object locations,
+              they fail to address occlusion relationships explicitly. 
+              Given a pre-trained image diffusion model, our method leverages volume rendering principles to "render" the scene in latent space, 
+              guided by occlusion relationships and the estimated transmittance of
+              objects. This approach does not require retraining or finetuning the image diffusion model,
+               yet it enables accurate occlusion control due to its physics-grounded foundation. 
+               In extensive experiments, our method significantly outperforms existing approaches in terms of occlusion accuracy. Furthermore, we demonstrate that by adjusting the opacities of objects or concepts during rendering, our method can achieve a variety of effects, such as altering the transparency of objects, the density of mass (e.g., forests), the concentration of particles (e.g., rain, fog), the intensity of light, and the strength of lens effects, etc.
+          </p>
+        </div>
+      </div>
+    </div>
+    <!--/ Abstract. -->
+
+    <!-- Paper video. -->
+    <!-- <div class="columns is-centered has-text-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Video</h2>
+        <div class="publication-video">
+          <iframe src="https://www.youtube.com/embed/MrKrnHhk8IA?rel=0&amp;showinfo=0"
+                  frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+        </div>
+      </div>
+    </div> -->
+    <!--/ Paper video. -->
+  </div>
+</section>
+
+<!-- Framework -->
+<section class="section">
+  <div class="container is-max-desktop">
+    <div class="hero-body">
+      <div class="columns is-centered has-text-centered">
+        <h2 class="title is-3">Framework</h2></div>
+        <img src="./static/images/framework.jpg" 
+          alt="Framework Image" 
+          style="width:100%; height:auto;">
+        </img>
+        <div class="content has-text-justified">
+          <p>
+          <!-- LaRender simply replaces vanilla cross attention layers to Latent Rendering layers. Given an occlusion graph with bounding boxes provided by users or parsed by LLMs, we rearrange these objects from back to front via topological sorting. For each cross-attention layer in a trained image diffusion model, we allow the input feature attend to each object prompt, obtaining object-wise latent features (hidden states). Then we estimate the transmittance map Mi for each object from its attention map and bounding box. Subsequently, we position an orthographic camera above the top object, facing the latent features. Finally, we apply the Latent Rendering formula to obtain the output scene representation that physically ensures occlusion relationships. The width of the orange dashed lines depicts the change of the accumulated transmittance Ti (initially to be 1) in different positions, and the colored solid lines represent the integrated latent features through their respective camera rays. -->
+          Figure 2. LaRender replaces cross-attention with Latent Rendering layers. Using an occlusion graph, objects are sorted back-to-front. Each cross-attention layer extracts object-wise latent features, from which transmittance maps are estimated. An orthographic camera captures these features, and Latent Rendering generates a scene that preserves physical occlusion.
+        </p>
+      
+    </div>
+  </div>
+</section>
+
+
+<!-- Occlusion control demos -->
+
+<section class="section">
+  <div class="container is-max-desktop has-text-centered">
+    <h2 class="title is-3">Occlusion Control</h2>
+    <p>Click the buttons to change the occlusion order.</p>
+
+    <style>
+      .demo-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        max-width: 450px;       /* 宽度略增 */
+        height: 550px;          /* 容器高度增加 */
+      }
+      .demo-buttons {
+        display: flex;
+        justify-content: center;
+        gap: 8px;               /* 间距略增 */
+        flex-wrap: nowrap;      /* 保持横向排列 */
+        margin-bottom: 10px;
+      }
+      .demo-buttons img {
+        width: 110px;            /* 按钮增大 */
+        cursor: pointer;
+      }
+      .demo-container img.result {
+        width: 100%;
+        max-height: 450px;      /* 主图增大 */
+        object-fit: contain;
+      }
+      .demo-buttons img.active {
+        border: 3px solid #00aaff;  /* 高亮边框 */
+        border-radius: 5px;
+        opacity: 1;
+      }
+      .demo-buttons img {
+        opacity: 0.8;  /* 未按下按钮稍微透明 */
+        transition: all 0.2s;
+      }
+      .demo-buttons img:hover {
+        opacity: 1;
+      }
+
+    </style>
+    
+
+    <!-- 上两组 demo -->
+    <div style="display: flex; justify-content: space-around; flex-wrap: wrap; gap: 20px; margin-bottom: 40px;">
+      <div class="demo-container">
+        <div id="buttons1" class="demo-buttons"></div>
+        <img id="resultImage1" class="result" src="static/images/cat_branch_dog.jpg">
+      </div>
+      <div class="demo-container">
+        <div id="buttons2" class="demo-buttons"></div>
+        <img id="resultImage2" class="result" src="static/images/bear_computer.jpg">
+      </div>
+    </div>
+
+    <!-- 下两组 demo -->
+    <div style="display: flex; justify-content: space-around; flex-wrap: wrap; gap: 20px;">
+      <div class="demo-container">
+        <div id="buttons3" class="demo-buttons"></div>
+        <img id="resultImage3" class="result" src="static/images/boy_girl.jpg">
+      </div>
+      <div class="demo-container">
+        <div id="buttons4" class="demo-buttons"></div>
+        <img id="resultImage4" class="result" src="static/images/vase_clock.jpg">
+      </div>
+    </div>
+
+    <script>
+      function createDemo(buttonImages, resultImages, buttonsDivId, resultImgId) {
+        const buttonsDiv = document.getElementById(buttonsDivId);
+        const img = document.getElementById(resultImgId);
+
+        buttonImages.forEach((btnSrc,index)=>{
+          const btnImg = document.createElement("img");
+          btnImg.src = btnSrc;
+          btnImg.alt = `Button ${index+1}`;
+
+          // 初始第一个按钮按下
+          if(index === 0) btnImg.classList.add("active");
+
+          btnImg.onclick = ()=>{
+            // 移除同组按钮的 active
+            buttonsDiv.querySelectorAll("img").forEach(el=>el.classList.remove("active"));
+            btnImg.classList.add("active");
+            img.src = resultImages[index];
+          };
+          buttonsDiv.appendChild(btnImg);
+        });
+      }
+
+      // ==== 第一组 demo: cat/branch/dog ====
+      createDemo(
+        ["static/images/button_cat_branch_dog.jpg","static/images/button_cat_dog_branch.jpg","static/images/button_dog_branch_cat.jpg","static/images/button_branch_cat_dog.jpg"],
+        ["static/images/cat_branch_dog.jpg","static/images/cat_dog_branch.jpg","static/images/dog_branch_cat.jpg","static/images/branch_cat_dog.jpg"],
+        "buttons1",
+        "resultImage1"
+      );
+
+      // ==== 第二组 demo: bear/computer ====
+      createDemo(
+        ["static/images/button_bear_computer.jpg","static/images/button_computer_bear.jpg"],
+        ["static/images/bear_computer.jpg","static/images/computer_bear.jpg"],
+        "buttons2",
+        "resultImage2"
+      );
+
+      // ==== 第三组 demo: boy/girl ====
+      createDemo(
+        ["static/images/button_boy_girl.jpg","static/images/button_girl_boy.jpg"],
+        ["static/images/boy_girl.jpg","static/images/girl_boy.jpg"],
+        "buttons3",
+        "resultImage3"
+      );
+
+      // ==== 第四组 demo: vase/clock ====
+      createDemo(
+        ["static/images/button_vase_clock.jpg","static/images/button_clock_vase.jpg"],
+        ["static/images/vase_clock.jpg","static/images/clock_vase.jpg"],
+        "buttons4",
+        "resultImage4"
+      );
+    </script>
+  </div>
+</section>
+
+
+
+<!-- Opacity control demo -->
+<section class="section">
+  <div class="container is-max-desktop has-text-centered">
+    <h2 class="title is-3">Semantic Opacity Control</h2>
+    <p>Move the sliders to control the opacities.</p>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+
+      <!-- 图片块模板 -->
+      <div class="group">
+        <img id="img0" src="static/images/reflection/larender_IterComp_sky-forest-lake-reflection_02_0.05.jpg" style="width: 100%; max-width: 500px;">
+        <input type="range" id="slider0" min="0" max="19" value="0" style="width: 100%;">
+        <p id="text0"></p>
+      </div>
+
+      <div class="group">
+        <img id="img1" src="static/images/fog/larender_IterComp_mountains-fog_05_0.10.jpg" style="width: 100%; max-width: 500px;">
+        <input type="range" id="slider1" min="0" max="18" value="0" style="width: 100%;">
+        <p id="text1"></p>
+      </div>
+
+      <div class="group">
+        <img id="img2" src="static/images/trees/larender_IterComp_night-cathedral-trees_05_0.05.jpg" style="width: 100%; max-width: 500px;">
+        <input type="range" id="slider2" min="0" max="19" value="0" style="width: 100%;">
+        <p id="text2"></p>
+      </div>
+
+      <div class="group">
+        <img id="img3" src="static/images/effects/larender_IterComp_seaside-effects_05_0.05.jpg" style="width: 100%; max-width: 500px;">
+        <input type="range" id="slider3" min="0" max="19" value="0" style="width: 100%;">
+        <p id="text3"></p>
+      </div>
+
+    </div>
+
+    <script>
+      // 每组的路径模板 & 对应的离散 opacity 值
+      const groups = [
+        {
+          concept: "reflection",
+          template: "static/images/reflection/larender_IterComp_sky-forest-lake-reflection_02_{val}.jpg",
+          opacities: [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99]
+        },
+        {
+          concept: "fog",
+          template: "static/images/fog/larender_IterComp_mountains-fog_05_{val}.jpg",
+          opacities: [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99]
+        },
+        {
+          concept: "palm trees",
+          template: "static/images/trees/larender_IterComp_night-cathedral-trees_09_{val}.jpg",
+          opacities: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99]
+        },
+        {
+          concept: "long exposure effects",
+          template: "static/images/effects/larender_IterComp_seaside-effects_00_{val}.jpg",
+          opacities: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85]
+        }
+      ];
+
+      // 初始化每个 slider 的事件
+      groups.forEach((group, idx) => {
+        const slider = document.getElementById(`slider${idx}`);
+        const img = document.getElementById(`img${idx}`);
+        const text = document.getElementById(`text${idx}`);
+
+        slider.max = group.opacities.length - 1;
+
+        function update() {
+          const val = group.opacities[parseInt(slider.value)];
+          const valStr = val.toFixed(2);
+          img.src = group.template.replace("{val}", valStr);
+          text.textContent = `${group.concept}: ${valStr}`;
+        }
+
+        slider.addEventListener("input", update);
+        update(); // 初始化显示
+      });
+    </script>
+  </div>
+</section>
+
+
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <!-- <h2 class="title is-3 has-text-centered">Rain & Sunlight Control</h2> -->
+
+    <div class="rain-sunlight-container">
+      <!-- 雨量纵向滑条，label在左 -->
+      <div class="vertical-slider-wrapper">
+        <span id="rainLabel">Rain: 0.00</span>
+        <input type="range" id="rainSlider" min="0" max="20" value="0" step="1">
+      </div>
+
+      <!-- 图片和光照横向滑条 -->
+      <div class="image-horizontal-wrapper">
+        <div class="horizontal-slider-wrapper">
+          <span id="sunlightLabel">Sunlight: 0.00</span>
+          <input type="range" id="sunlightSlider" min="0" max="20" value="0" step="1">
+        </div>
+
+        <div class="rain-sunlight-image">
+          <img id="rainSunlightImage" src="static/images/rain_sunlight/larender_IterComp_view-rain-sunlight_00_0.00_0.00.jpg" alt="Rain and Sunlight">
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const rainSlider = document.getElementById("rainSlider");
+  const sunlightSlider = document.getElementById("sunlightSlider");
+  const rainLabel = document.getElementById("rainLabel");
+  const sunlightLabel = document.getElementById("sunlightLabel");
+  const img = document.getElementById("rainSunlightImage");
+
+  const levels = [0,0.05,0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99];
+
+  function updateImage() {
+    const rainVal = levels[Math.min(parseInt(rainSlider.value), levels.length-1)];
+    const sunlightVal = levels[Math.min(parseInt(sunlightSlider.value), levels.length-1)];
+    const rainStr = rainVal.toFixed(2);
+    const sunlightStr = sunlightVal.toFixed(2);
+
+    rainLabel.textContent = `Rain: ${rainStr}`;
+    sunlightLabel.textContent = `Sunlight: ${sunlightStr}`;
+    img.src = `static/images/rain_sunlight/larender_IterComp_view-rain-sunlight_00_${rainStr}_${sunlightStr}.jpg`;
+  }
+
+  rainSlider.addEventListener("input", updateImage);
+  sunlightSlider.addEventListener("input", updateImage);
+
+  updateImage(); // 初始化显示
+});
+</script>
+
+
+
+
+
+<section class="section" id="BibTeX">
+  <div class="container is-max-desktop content">
+    <h2 class="title">BibTeX</h2>
+    <pre><code>@inproceedings{zhan2025larender,
+  title={LaRender: Training-Free Occlusion Control in Image Generation via Latent Rendering},
+  author={Zhan, Xiaohang and Liu, Dingming},
+  booktitle={International Conference on Computer Vision},
+  year={2025},
+}</code></pre>
+  </div>
+</section>
+
+
+<footer class="footer">
+  <div class="container">
+    <div class="columns is-centered">
+      <div class="column is-8">
+        <div class="content">
+          <p>
+            The website template is borrowed from <a
+            href="https://github.com/nerfies/nerfies.github.io">https://nerfies.github.io/</a> and is licensed under a <a rel="license"
+            href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
